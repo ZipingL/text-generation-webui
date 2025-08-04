@@ -55,6 +55,10 @@ def _generate_reply(question, state, stopping_strings=None, is_chat=False, escap
         state = apply_extensions('state', state)
         question = apply_extensions('input', question, state)
 
+    if state.get('response_schema') and not state.get('grammar_string'):
+        from modules.grammar.grammar_utils import json_schema_to_grammar
+        state['grammar_string'] = json_schema_to_grammar(state.pop('response_schema'))
+
     # Find the stopping strings
     all_stop_strings = []
     for st in (stopping_strings, state['custom_stopping_strings']):
