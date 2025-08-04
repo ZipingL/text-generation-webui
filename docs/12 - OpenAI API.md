@@ -96,6 +96,42 @@ curl http://127.0.0.1:5000/v1/chat/completions \
   }'
 ```
 
+#### Structured responses
+
+```shell
+curl http://127.0.0.1:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful math tutor."
+      },
+      {
+        "role": "user",
+        "content": "solve 8x + 31 = 2"
+      }
+    ],
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "math_response",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "final_answer": {"type": "string"}
+          },
+          "required": ["final_answer"],
+          "additionalProperties": false
+        }
+      }
+    }
+  }'
+```
+
+Streaming is not supported when using `response_format`. The server validates the provided JSON schema and removes any markdown code fences from the model output.
+
 #### Logits
 
 ```shell

@@ -145,6 +145,9 @@ async def openai_chat_completions(request: Request, request_data: ChatCompletion
     path = request.url.path
     is_legacy = "/generate" in path
 
+    if request_data.response_format is not None and request_data.stream:
+        raise HTTPException(status_code=400, detail="response_format is not compatible with stream")
+
     if request_data.stream:
         async def generator():
             async with streaming_semaphore:

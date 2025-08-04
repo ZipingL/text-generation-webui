@@ -144,6 +144,7 @@ class ChatCompletionRequestParams(BaseModel):
     temperature: float | None = 1
     top_p: float | None = 1
     user: str | None = Field(default=None, description="Unused parameter.")
+    response_format: dict | None = Field(default=None, description="Structured response format definition.")
 
     mode: str = Field(default='instruct', description="Valid options: instruct, chat, chat-instruct.")
 
