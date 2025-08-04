@@ -1,6 +1,7 @@
 import copy
 import json
 import time
+import re
 from collections import deque
 
 import tiktoken
@@ -142,6 +143,32 @@ def chat_completions_common(body: dict, is_legacy: bool = False, stream=False, p
     tools = None
     if 'tools' in body and body['tools'] is not None and isinstance(body['tools'], list) and len(body['tools']) > 0:
         tools = validateTools(body['tools'])  # raises InvalidRequestError if validation fails
+
+    response_schema = None
+    jsonschema_module = None
+    if body.get('response_format') is not None:
+        if stream:
+            raise InvalidRequestError(message="stream is not supported with response_format", param='stream')
+        response_format = body['response_format']
+        if not isinstance(response_format, dict):
+            raise InvalidRequestError(message="response_format must be an object", param='response_format')
+        if response_format.get('type') != 'json_schema':
+            raise InvalidRequestError(message="response_format.type must be 'json_schema'", param='response_format')
+        json_schema_def = response_format.get('json_schema')
+        if not isinstance(json_schema_def, dict):
+            raise InvalidRequestError(message="response_format.json_schema must be an object", param='response_format')
+        schema_obj = json_schema_def.get('schema')
+        if not isinstance(schema_obj, dict):
+            raise InvalidRequestError(message="response_format.json_schema.schema must be an object", param='response_format')
+        try:
+            import jsonschema as jsonschema_module
+        except ModuleNotFoundError:
+            raise InvalidRequestError(message="jsonschema package is required for response_format", param='response_format')
+        try:
+            jsonschema_module.Draft7Validator.check_schema(schema_obj)
+        except Exception as e:
+            raise InvalidRequestError(message=f"Invalid json schema: {e}", param='response_format')
+        response_schema = schema_obj
 
     messages = body['messages']
     for m in messages:
@@ -302,6 +329,17 @@ def chat_completions_common(body: dict, is_legacy: bool = False, stream=False, p
 
         yield chunk
     else:
+        if response_schema is not None:
+            try:
+                cleaned = re.sub(r'^```(?:json)?\n?', '', answer.strip())
+                cleaned = re.sub(r'\n?```$', '', cleaned).strip()
+                parsed = json.loads(cleaned)
+                jsonschema_module.validate(parsed, response_schema)
+                answer = json.dumps(parsed, ensure_ascii=False)
+            except json.JSONDecodeError as e:
+                raise InvalidRequestError(message=f"Model response is not valid JSON: {e}", param='response_format')
+            except jsonschema_module.exceptions.ValidationError as e:
+                raise InvalidRequestError(message=f"Model response does not conform to schema: {e.message}", param='response_format')
         resp = {
             "id": cmpl_id,
             "object": object_type,
