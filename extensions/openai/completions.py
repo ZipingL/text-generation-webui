@@ -232,6 +232,9 @@ def chat_completions_common(body: dict, is_legacy: bool = False, stream=False, p
         'stream': stream
     })
 
+    if response_schema is not None:
+        generate_params['response_schema'] = response_schema
+
     max_tokens = generate_params['max_new_tokens']
     if max_tokens in [None, 0]:
         generate_params['max_new_tokens'] = 512
@@ -333,6 +336,9 @@ def chat_completions_common(body: dict, is_legacy: bool = False, stream=False, p
             try:
                 cleaned = re.sub(r'^```(?:json)?\n?', '', answer.strip())
                 cleaned = re.sub(r'\n?```$', '', cleaned).strip()
+                match = re.search(r'(\{.*\}|\[.*\])', cleaned, re.DOTALL)
+                if match:
+                    cleaned = match.group(1)
                 parsed = json.loads(cleaned)
                 jsonschema_module.validate(parsed, response_schema)
                 answer = json.dumps(parsed, ensure_ascii=False)

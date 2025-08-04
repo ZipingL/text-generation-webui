@@ -22,6 +22,78 @@ from modules import shared
 logger = logging.getLogger(__name__)
 
 
+def json_schema_to_grammar(schema: Dict) -> str:
+    """Convert a JSON schema into a simple GBNF grammar string.
+
+    This implementation supports a limited subset of JSON schema features:
+    objects with required properties, arrays, and the primitive types string,
+    number, integer, boolean and null. Optional properties and
+    ``additionalProperties`` are ignored.
+    """
+
+    import re
+
+    def sanitize(name: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_]", "_", name)
+
+    rules: List[str] = []
+
+    def build_rule(name: str, schema_obj: Dict) -> str:
+        t = schema_obj.get("type")
+
+        if t == "object":
+            props: Dict = schema_obj.get("properties", {})
+            required = schema_obj.get("required", [])
+            parts = []
+            for key in required:
+                child_name = f"{sanitize(name)}_{sanitize(key)}"
+                rule_body = build_rule(child_name, props.get(key, {}))
+                rules.append(f"{child_name} ::= {rule_body}")
+                parts.append(f'"{key}" : {child_name}')
+            return "{ " + ", ".join(parts) + " }"
+
+        if t == "array":
+            item_name = f"{sanitize(name)}_item"
+            item_rule = build_rule(item_name, schema_obj.get("items", {}))
+            rules.append(f"{item_name} ::= {item_rule}")
+            return f"[ {item_name} ( , {item_name} )* ]"
+
+        if t == "string":
+            return "string"
+
+        if t == "number":
+            return "number"
+
+        if t == "integer":
+            return "int"
+
+        if t == "boolean":
+            return '"true" | "false"'
+
+        if t == "null":
+            return '"null"'
+
+        raise ValueError(f"Unsupported schema type: {t}")
+
+    root_rule = build_rule("root", schema)
+
+    base_defs = """
+string ::= "\"" char* "\""
+char ::= [^"\\] | "\\" ["\\/bfnrt] | "\\u" hex hex hex hex
+hex ::= [0-9a-fA-F]
+number ::= int frac? exp?
+int ::= "-"? digit+
+frac ::= "." digit+
+exp ::= ("e" | "E") ("+" | "-")? digit+
+digit ::= [0-9]
+"""
+
+    grammar_lines = base_defs.strip().split("\n")
+    grammar_lines.append(f"root ::= {root_rule}")
+    grammar_lines.extend(rules)
+    return "\n".join(grammar_lines)
+
+
 ########################
 # EBNF Grammar Parsing #
 ########################
